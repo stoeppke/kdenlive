@@ -221,6 +221,28 @@ Transitions come in two (three) flavors, but always represented by MLT `<transit
 
 TODO
 
+### Multicam Angles
+
+A timeline clip of a sequence can show a single video track of that sequence, called a multicam angle. Angle *n* is the *n*-th video track of the sequence, counted from the bottom and starting at 0. Such a clip refers to an angle *tractor* instead of the sequence tractor. The angle tractor shares two tracks of the sequence tractor: its black background track and the angle's video track. It has no transitions, so it shows the angle's image and black where the angle track is empty, and it keeps the sequence length.
+
+```xml
+  <tractor id="tractor10" in="00:00:00.000" out="00:30:04.760">
+    <property name="kdenlive:id">30</property>
+    <property name="kdenlive:control_uuid">{...}</property> <!-- same as the sequence clip -->
+    <property name="kdenlive:producer_type">17</property>
+    <property name="kdenlive:multicam_angle">0</property>
+    <track producer="producer2"/> <!-- the sequence's black background track -->
+    <track producer="tractor7"/> <!-- the sequence's video track used as angle -->
+  </tractor>
+  ...
+  <entry in="00:00:00.000" out="00:05:59.960" producer="tractor10">
+    <property name="kdenlive:multicam_angle">0</property>
+    <property name="kdenlive:id">30</property>
+  </entry>
+```
+
+The angle tractor has no `kdenlive:uuid`, so it is not taken for a sequence. The `kdenlive:multicam_angle` property of the playlist entry is the reference: when loading, Kdenlive rebuilds the angle tractor from the current sequence tractor. Plain MLT plays and renders the stored angle tractors directly.
+
 ### Filters (Effect)
 
 TODO

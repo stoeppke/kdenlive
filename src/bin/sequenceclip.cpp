@@ -37,6 +37,7 @@ SPDX-License-Identifier: GPL-3.0-only OR LicenseRef-KDE-Accepted-GPL
 #include <QPainter>
 #include <QProcess>
 #include <QtMath>
+#include <mlt++/MltTractor.h>
 
 #ifdef CRASH_AUTO_TEST
 #include "logger.hpp"
@@ -412,4 +413,91 @@ void SequenceClip::updateAudioSync()
         // Mark audio thumb as dirty
         pCore->getMonitor(Kdenlive::ClipMonitor)->markAudioDirty(false);
     }
+}
+
+int SequenceClip::multicamTrackIndex(int angle) const
+{
+    QReadLocker lock(&m_producerLock);
+    if (angle < 0 || !m_masterProducer || m_masterProducer->parent().type() != mlt_service_tractor_type) {
+        return -1;
+    }
+    Mlt::Tractor sequence(m_masterProducer->parent());
+    int videoIndex = 0;
+    // Track 0 is the black background, audio tracks are placed below the video tracks
+    for (int i = 1; i < sequence.count(); i++) {
+        std::unique_ptr<Mlt::Producer> track(sequence.track(i));
+        if (track->parent().get_int("kdenlive:audio_track") == 1) {
+            continue;
+        }
+        if (videoIndex == angle) {
+            return i;
+        }
+        videoIndex++;
+    }
+    return -1;
+}
+
+QStringList SequenceClip::multicamAngles() const
+{
+    QReadLocker lock(&m_producerLock);
+    QStringList angles;
+    if (!m_masterProducer || m_masterProducer->parent().type() != mlt_service_tractor_type) {
+        return angles;
+    }
+    Mlt::Tractor sequence(m_masterProducer->parent());
+    for (int i = 1; i < sequence.count(); i++) {
+        std::unique_ptr<Mlt::Producer> track(sequence.track(i));
+        if (track->parent().get_int("kdenlive:audio_track") == 1) {
+            continue;
+        }
+        QString name = QString::fromUtf8(track->parent().get("kdenlive:track_name"));
+        if (name.isEmpty()) {
+            // Same tag as the track in the sequence timeline
+            name = QStringLiteral("V%1").arg(angles.count() + 1);
+        }
+        angles << name;
+    }
+    return angles;
+}
+
+std::shared_ptr<Mlt::Producer> SequenceClip::createMulticamProducer(int angle)
+{
+    int trackIndex = multicamTrackIndex(angle);
+    if (trackIndex < 0) {
+        return nullptr;
+    }
+    QReadLocker lock(&m_producerLock);
+    Mlt::Tractor sequence(m_masterProducer->parent());
+    std::unique_ptr<Mlt::Producer> background(sequence.track(0));
+    std::unique_ptr<Mlt::Producer> angleTrack(sequence.track(trackIndex));
+    // The angle shares the sequence's tracks: the black background keeps the sequence length and fills the angle's gaps.
+    // Without compositions, the topmost track with an image is displayed.
+    auto angleProducer = std::make_shared<Mlt::Tractor>(pCore->getProjectProfile());
+    angleProducer->set_track(*background.get(), 0);
+    angleProducer->set_track(*angleTrack.get(), 1);
+    Mlt::Properties source(m_masterProducer->parent().get_properties());
+    Mlt::Properties dest(angleProducer->get_properties());
+    // No kdenlive:uuid here, a tractor with uuid is loaded as a sequence
+    dest.pass_list(source, "kdenlive:id,kdenlive:control_uuid,kdenlive:producer_type,kdenlive:duration,kdenlive:maxduration");
+    angleProducer->set("kdenlive:multicam_angle", angle);
+    angleProducer->set("set.test_audio", 1);
+    angleProducer->set("set.test_image", 0);
+    return angleProducer;
+}
+
+std::unique_ptr<Mlt::Producer> SequenceClip::getMulticamThumbProducer(int angle)
+{
+    if (m_clipStatus == FileStatus::StatusWaiting || m_clipStatus == FileStatus::StatusMissing) {
+        return nullptr;
+    }
+    if (!m_thumbMutex.tryLock()) {
+        return nullptr;
+    }
+    QReadLocker lock(&pCore->xmlMutex);
+    std::shared_ptr<Mlt::Producer> angleProducer = createMulticamProducer(angle);
+    m_thumbMutex.unlock();
+    if (!angleProducer) {
+        return nullptr;
+    }
+    return std::make_unique<Mlt::Producer>(*angleProducer.get());
 }

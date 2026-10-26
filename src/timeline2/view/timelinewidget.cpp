@@ -124,6 +124,10 @@ void TimelineWidget::populateActions(KActionCollection *actions)
     m_timelineClipMenu->addAction(actions->action(QStringLiteral("save_to_bin")));
     m_timelineClipMenu->addAction(actions->action(QStringLiteral("send_sequence")));
     m_timelineClipMenu->addAction(actions->action(QStringLiteral("copy_to_sequence")));
+    m_timelineClipMenu->addAction(actions->action(QStringLiteral("multicam_create")));
+    m_multicamMenu = new QMenu(i18n("Multicam Angle"), this);
+    m_multicamMenu->setIcon(QIcon::fromTheme(QStringLiteral("view-split-left-right")));
+    m_timelineClipMenu->addMenu(m_multicamMenu);
 
     auto *markers = new QMenu(i18n("Markers"), this);
     markers->addAction(actions->action(QStringLiteral("add_marker_guide_quickly")));
@@ -365,6 +369,26 @@ void TimelineWidget::showClipMenu(int cid)
         } else {
             ac->setVisible(true);
         }
+    }
+    // Angles of a multicam (sequence) clip
+    m_multicamMenu->clear();
+    const QStringList angles = timelineController.multicamAngles(cid);
+    m_multicamMenu->menuAction()->setVisible(!angles.isEmpty());
+    if (!angles.isEmpty()) {
+        int currentAngle = timelineController.clipMulticamAngle(cid);
+        auto *angleGroup = new QActionGroup(m_multicamMenu);
+        const auto addAngle = [this, cid, currentAngle, angleGroup](const QString &label, int angle) {
+            QAction *action = m_multicamMenu->addAction(label);
+            action->setCheckable(true);
+            action->setChecked(angle == currentAngle);
+            angleGroup->addAction(action);
+            connect(action, &QAction::triggered, this, [this, cid, angle]() { timelineController.setMulticamAngle(angle, cid); });
+        };
+        for (int i = 0; i < angles.count(); i++) {
+            addAngle(QStringLiteral("%1: %2").arg(i + 1).arg(angles.at(i)), i);
+        }
+        m_multicamMenu->addSeparator();
+        addAngle(i18n("Full Sequence"), -1);
     }
     m_timelineClipMenu->popup(m_clickPos);
 }

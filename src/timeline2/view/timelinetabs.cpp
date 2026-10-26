@@ -444,6 +444,11 @@ void TimelineTabs::populateActions(KActionCollection *actions)
     bind(QStringLiteral("clip_split"), [](TimelineController *controller) { controller->splitAV(); });
     bind(QStringLiteral("clip_enable_all"), [](TimelineController *controller) { controller->setClipsEnabled(true); });
     bind(QStringLiteral("clip_disable_all"), [](TimelineController *controller) { controller->setClipsEnabled(false); });
+    for (int angle = 0; angle < 9; angle++) {
+        bind(QStringLiteral("multicam_cut_angle_%1").arg(angle + 1), [angle](TimelineController *controller) { controller->multicamCut(angle); });
+        bind(QStringLiteral("multicam_switch_angle_%1").arg(angle + 1), [angle](TimelineController *controller) { controller->setMulticamAngle(angle); });
+    }
+    bind(QStringLiteral("multicam_full_sequence"), [](TimelineController *controller) { controller->setMulticamAngle(-1); });
     bind(QStringLiteral("extract_clip"), [](TimelineController *controller) { controller->extract(); });
     bind(QStringLiteral("save_to_bin"), [](TimelineController *controller) { controller->saveZone(); });
     bind(QStringLiteral("set_audio_align_ref"), [](TimelineController *controller) { controller->setAudioRef(); });

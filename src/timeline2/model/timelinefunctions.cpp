@@ -92,6 +92,8 @@ bool TimelineFunctions::cloneClip(const std::shared_ptr<TimelineItemModel> &time
         return false;
     }
     timeline->m_allClips[newId]->m_endlessResize = timeline->m_allClips[clipId]->m_endlessResize;
+    // The new clip is not yet in a track, its undo is the clip deletion
+    timeline->m_allClips[newId]->setMulticamAngle_lambda(timeline->m_allClips[clipId]->multicamAngle())();
 
     // copy useful timeline properties
     timeline->m_allClips[clipId]->passTimelineProperties(timeline->m_allClips[newId]);
@@ -1242,6 +1244,58 @@ bool TimelineFunctions::changeClipState(const std::shared_ptr<TimelineItemModel>
         UPDATE_UNDO_REDO_NOLOCK(local_redo, local_undo, undo, redo);
     }
     return result;
+}
+
+bool TimelineFunctions::setMulticamAngle(const std::shared_ptr<TimelineItemModel> &timeline, int clipId, int angle, Fun &undo, Fun &redo)
+{
+    int track = timeline->getClipTrackId(clipId);
+    Fun local_undo = []() { return true; };
+    Fun local_redo = []() { return true; };
+    if (!timeline->m_allClips[clipId]->setMulticamAngle(angle, local_undo, local_redo)) {
+        bool undone = local_undo();
+        Q_ASSERT(undone);
+        return false;
+    }
+    // For the producer change to work, we need to unplant/replant the clip
+    if (track > -1) {
+        Fun replug_clip = [timeline, track, clipId]() {
+            timeline->getTrackById(track)->replugClip(clipId);
+            return true;
+        };
+        replug_clip();
+        PUSH_LAMBDA(replug_clip, local_undo);
+        PUSH_LAMBDA(replug_clip, local_redo);
+    }
+    UPDATE_UNDO_REDO_NOLOCK(local_redo, local_undo, undo, redo);
+    return true;
+}
+
+bool TimelineFunctions::requestMulticamCut(const std::shared_ptr<TimelineItemModel> &timeline, int clipId, int position, int angle)
+{
+    Fun undo = []() { return true; };
+    Fun redo = []() { return true; };
+    int trackId = timeline->getClipTrackId(clipId);
+    int targetId = clipId;
+    if (position > timeline->getClipPosition(clipId)) {
+        // Cut the clip with its group, so that the sequence audio stays aligned with the angles
+        if (!requestClipCut(timeline, clipId, position, undo, redo)) {
+            undo();
+            return false;
+        }
+        targetId = timeline->getClipByPosition(trackId, position);
+    }
+    if (targetId == -1 || !setMulticamAngle(timeline, targetId, angle, undo, redo)) {
+        undo();
+        return false;
+    }
+    Fun local_refresh = [uuid = timeline->uuid()]() {
+        pCore->updateHoverItem(uuid);
+        return true;
+    };
+    local_refresh();
+    UPDATE_UNDO_REDO_NOLOCK(local_refresh, local_refresh, undo, redo);
+    pCore->pushUndo(undo, redo, i18n("Cut to Angle %1", angle + 1));
+    return true;
 }
 
 bool TimelineFunctions::requestSplitAudio(const std::shared_ptr<TimelineItemModel> &timeline, int clipId, QList<int> targetTracks)
@@ -2713,6 +2767,9 @@ bool TimelineFunctions::pasteTimelineClips(const std::shared_ptr<TimelineItemMod
             timeline_undo();
             semaphore.release(1);
             return false;
+        }
+        if (prod.hasAttribute(QStringLiteral("multicamAngle")) && state != PlaylistState::AudioOnly) {
+            timeline->m_allClips[newId]->setMulticamAngle_lambda(prod.attribute(QStringLiteral("multicamAngle")).toInt())();
         }
         if (prod.hasAttribute(QStringLiteral("timemap"))) {
             // This is a timeremap

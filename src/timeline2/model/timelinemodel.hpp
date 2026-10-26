@@ -154,6 +154,7 @@ public:
         AudioStreamRole,      /// clip only
         AudioMultiStreamRole, /// clip only
         AudioStreamIndexRole, /// clip only
+        MulticamAngleRole,    /// clip only, label of the active multicam angle
         IsCompositeRole,      /// track only
         IsLockedRole,         /// track only
         HeightRole,           /// track only

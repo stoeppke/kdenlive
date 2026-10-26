@@ -2275,6 +2275,123 @@ void TimelineController::cutAllClipsUnderCursor(int position)
     TimelineFunctions::requestClipCutAll(m_model, position);
 }
 
+bool TimelineController::isMulticamClip(int clipId) const
+{
+    if (!m_model->isClip(clipId)) {
+        return false;
+    }
+    int tid = m_model->getClipTrackId(clipId);
+    if (tid == -1 || m_model->isAudioTrack(tid) || m_model->getTrackById_const(tid)->isLocked()) {
+        return false;
+    }
+    std::shared_ptr<ProjectClip> binClip = pCore->projectItemModel()->getClipByBinID(m_model->getClipBinId(clipId));
+    return binClip && binClip->clipType() == ClipType::Timeline;
+}
+
+int TimelineController::multicamClipAtPosition(int position) const
+{
+    QList<int> candidates;
+    // Topmost video track first
+    for (auto it = m_model->m_allTracks.crbegin(); it != m_model->m_allTracks.crend(); ++it) {
+        if ((*it)->isAudioTrack()) {
+            continue;
+        }
+        int cid = m_model->getClipByPosition((*it)->getId(), position);
+        if (cid > -1 && isMulticamClip(cid)) {
+            candidates << cid;
+        }
+    }
+    if (candidates.isEmpty()) {
+        return -1;
+    }
+    const auto selection = m_model->getCurrentSelection();
+    for (int cid : std::as_const(candidates)) {
+        if (selection.count(cid) > 0) {
+            return cid;
+        }
+    }
+    for (int cid : std::as_const(candidates)) {
+        if (m_model->getClipTrackId(cid) == m_activeTrack) {
+            return cid;
+        }
+    }
+    for (int cid : std::as_const(candidates)) {
+        if (m_model->getClipPtr(cid)->multicamAngle() > -1) {
+            return cid;
+        }
+    }
+    return candidates.first();
+}
+
+QStringList TimelineController::multicamAngles(int clipId) const
+{
+    if (!isMulticamClip(clipId)) {
+        return {};
+    }
+    return pCore->projectItemModel()->getClipByBinID(m_model->getClipBinId(clipId))->multicamAngles();
+}
+
+int TimelineController::clipMulticamAngle(int clipId) const
+{
+    return m_model->isClip(clipId) ? m_model->getClipPtr(clipId)->multicamAngle() : -1;
+}
+
+void TimelineController::multicamCut(int angle)
+{
+    int position = pCore->getMonitorPosition();
+    int cid = multicamClipAtPosition(position);
+    if (cid == -1) {
+        pCore->displayMessage(i18n("No multicam clip at playhead position"), ErrorMessage, 500);
+        return;
+    }
+    if (angle >= multicamAngles(cid).count()) {
+        pCore->displayMessage(i18n("The multicam clip has no angle %1", angle + 1), ErrorMessage, 500);
+        return;
+    }
+    if (m_model->getClipPtr(cid)->multicamAngle() == angle) {
+        pCore->displayMessage(i18n("Angle %1 is already active", angle + 1), InformationMessage, 500);
+        return;
+    }
+    QMutexLocker lk(&m_metaMutex);
+    TimelineFunctions::requestMulticamCut(m_model, cid, position, angle);
+}
+
+void TimelineController::setMulticamAngle(int angle, int clipId)
+{
+    std::unordered_set<int> selection = m_model->getCurrentSelection();
+    if (clipId > -1 && selection.count(clipId) == 0) {
+        selection = {clipId};
+    }
+    std::unordered_set<int> clips;
+    std::copy_if(selection.begin(), selection.end(), std::inserter(clips, clips.end()), [this](int cid) { return isMulticamClip(cid); });
+    if (clips.empty()) {
+        int cid = multicamClipAtPosition(pCore->getMonitorPosition());
+        if (cid == -1) {
+            pCore->displayMessage(i18n("Select a multicam clip"), ErrorMessage, 500);
+            return;
+        }
+        clips = {cid};
+    }
+    Fun undo = []() { return true; };
+    Fun redo = []() { return true; };
+    bool changed = false;
+    for (int cid : clips) {
+        if (angle >= multicamAngles(cid).count()) {
+            continue;
+        }
+        if (!TimelineFunctions::setMulticamAngle(m_model, cid, angle, undo, redo)) {
+            undo();
+            return;
+        }
+        changed = true;
+    }
+    if (!changed) {
+        pCore->displayMessage(i18n("The multicam clip has no angle %1", angle + 1), ErrorMessage, 500);
+        return;
+    }
+    pCore->pushUndo(undo, redo, angle < 0 ? i18n("Show Full Sequence") : i18n("Switch to Angle %1", angle + 1));
+}
+
 int TimelineController::requestSpacerStartOperation(int trackId, int position)
 {
     QMutexLocker lk(&m_metaMutex);

@@ -9,6 +9,7 @@
 
 #include <KImageCache>
 #include <QCache>
+#include <QMutex>
 #include <QQuickImageProvider>
 #include <QReadWriteLock>
 #include <memory>
@@ -26,6 +27,9 @@ public:
 
 private:
     Mlt::Profile m_profile;
+    /** @brief Thumbnails of single multicam angles, keyed by request id (which changes when the sequence is modified) */
+    QCache<QString, QImage> m_angleCache{64 * 1024 * 1024};
+    QMutex m_angleCacheMutex;
     /** @brief Requests run in QML's pixmap reader threads, which outlive the timeline */
     static QReadWriteLock s_shutdownLock;
     static bool s_shuttingDown;

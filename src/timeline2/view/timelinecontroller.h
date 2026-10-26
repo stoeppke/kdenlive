@@ -496,6 +496,17 @@ public:
     /** @brief Cuts all clips at timeline position
      */
     Q_INVOKABLE void cutAllClipsUnderCursor(int position = -1);
+    /** @brief Cuts the multicam clip under the playhead and shows angle from the playhead to the end of the clip
+     */
+    void multicamCut(int angle);
+    /** @brief Shows angle on the selected multicam clips, or on the multicam clip under the playhead if nothing is selected.
+     *  Angle -1 shows the full sequence. If clipId is not part of the selection, only clipId is changed.
+     */
+    void setMulticamAngle(int angle, int clipId = -1);
+    /** @brief Returns the multicam angle names of a sequence clip in video state, empty for other clips */
+    QStringList multicamAngles(int clipId) const;
+    /** @brief Returns the multicam angle shown by a clip, -1 if it shows the full sequence */
+    int clipMulticamAngle(int clipId) const;
     /** @brief Request a spacer operation
      */
     Q_INVOKABLE int requestSpacerStartOperation(int trackId, int position);
@@ -850,6 +861,10 @@ public:
 
 private:
     SelectionState selectionState(const std::unordered_set<int> &selectedItems) const;
+    /** @brief Returns true if the clip is a sequence clip on an unlocked video track, so it can show a multicam angle */
+    bool isMulticamClip(int clipId) const;
+    /** @brief Returns the multicam clip to cut at position: a selected one, else one on the active track, else the topmost one */
+    int multicamClipAtPosition(int position) const;
     int m_duration;
     QQuickItem *m_root;
     KActionCollection *m_actionCollection{nullptr};

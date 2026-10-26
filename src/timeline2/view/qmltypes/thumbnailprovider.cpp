@@ -40,10 +40,30 @@ QImage ThumbnailProvider::requestImage(const QString &id, QSize *size, const QSi
         if (size) *size = result.size();
         return result;
     }
-    // id is binID/#frameNumber
+    // id is binID/uuid/#frameNumber, or binID/uuid/mc<angle>/#frameNumber for a single multicam angle
     QString binId = id.section('/', 0, 0);
     bool ok;
     int frameNumber = id.section('#', -1).toInt(&ok);
+    const QString angleSection = id.section('/', 2, 2);
+    if (ok && angleSection.startsWith(QLatin1String("mc"))) {
+        QMutexLocker cacheLock(&m_angleCacheMutex);
+        if (QImage *cached = m_angleCache.object(id)) {
+            result = *cached;
+        } else {
+            cacheLock.unlock();
+            std::shared_ptr<ProjectClip> binClip = pCore->projectItemModel()->getClipByBinID(binId);
+            std::unique_ptr<Mlt::Producer> prod = binClip ? binClip->getMulticamThumbProducer(angleSection.mid(2).toInt()) : nullptr;
+            if (prod && prod->is_valid()) {
+                result = makeThumbnail(std::move(prod), frameNumber, requestedSize);
+                if (!result.isNull()) {
+                    cacheLock.relock();
+                    m_angleCache.insert(id, new QImage(result), result.sizeInBytes());
+                }
+            }
+        }
+        if (size) *size = result.size();
+        return result;
+    }
     if (ok) {
         std::shared_ptr<ProjectClip> binClip = pCore->projectItemModel()->getClipByBinID(binId);
         if (binClip) {

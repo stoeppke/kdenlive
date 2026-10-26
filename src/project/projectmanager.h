@@ -257,6 +257,8 @@ public Q_SLOTS:
     void slotCreateSequenceFromSelection();
     /** @brief Copy clips from timeline selection to new sequence. */
     void slotCopyAndCreateSequenceFromSelection();
+    /** @brief Move the synchronized camera clips of the timeline selection to a new sequence and replace them with a multicam clip. */
+    void slotCreateMulticamFromSelection();
     /** @brief Show a track effect stack. */
     void showTrackEffectStack(int tid);
     /** @brief Final steps to be done once the timeline widget is fully build and has its final height */

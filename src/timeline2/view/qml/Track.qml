@@ -251,6 +251,7 @@ Item {
                     audioStream: itemOnTrack.model.audioStream
                     multiStream: itemOnTrack.model.multiStream
                     aStreamIndex: itemOnTrack.model.audioStreamIndex
+                    multicamAngle: itemOnTrack.model.multicamAngle
                     isAudio: itemOnTrack.model.audio
                     markers: itemOnTrack.model.markers
                     hasAudio: itemOnTrack.model.hasAudio

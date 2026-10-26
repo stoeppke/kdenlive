@@ -221,6 +221,7 @@ ProjectClip::~ProjectClip()
         m_audioProducers.clear();
         m_videoProducers.clear();
         m_timewarpProducers.clear();
+        clearMulticamProducers();
     }
 }
 
@@ -689,6 +690,7 @@ bool ProjectClip::setProducer(std::shared_ptr<Mlt::Producer> producer, bool gene
         m_audioProducers.clear();
         m_videoProducers.clear();
         m_timewarpProducers.clear();
+        clearMulticamProducers();
     }
     Q_EMIT refreshPropertiesPanel();
     if (hasLimitedDuration()) {
@@ -874,6 +876,29 @@ void ProjectClip::createDisabledMasterProducer()
     }
 }
 
+std::shared_ptr<Mlt::Producer> ProjectClip::createMulticamProducer(int)
+{
+    return nullptr;
+}
+
+QStringList ProjectClip::multicamAngles() const
+{
+    return {};
+}
+
+std::unique_ptr<Mlt::Producer> ProjectClip::getMulticamThumbProducer(int)
+{
+    return nullptr;
+}
+
+void ProjectClip::clearMulticamProducers()
+{
+    for (auto &p : m_multicamProducers) {
+        m_effectStack->removeService(p.second);
+    }
+    m_multicamProducers.clear();
+}
+
 bool ProjectClip::hasTimecode()
 {
     bool isAVClip = m_clipType == ClipType::AV || m_clipType == ClipType::Video || m_clipType == ClipType::Audio;
@@ -963,13 +988,29 @@ int ProjectClip::getStartTCFromProperties(int streamIndex)
 }
 
 std::shared_ptr<Mlt::Producer> ProjectClip::getTimelineProducer(int trackId, int clipId, PlaylistState::ClipState state, int audioStream, double speed,
-                                                                bool secondPlaylist, const TimeWarpInfo timeremapInfo)
+                                                                bool secondPlaylist, const TimeWarpInfo timeremapInfo, int multicamAngle)
 {
     if (!m_masterProducer) {
         return nullptr;
     }
     if (qFuzzyCompare(speed, 1.0) && !timeremapInfo.enableRemap) {
         // we are requesting a normal speed producer
+        if (multicamAngle > -1 && state == PlaylistState::VideoOnly && m_clipType == ClipType::Timeline) {
+            // Single angle of a multicam sequence, shared by all clips of this track showing the same angle
+            const QString angleKey = QStringLiteral("%1#%2").arg(secondPlaylist ? -trackId : trackId).arg(multicamAngle);
+            if (m_multicamProducers.count(angleKey) == 0) {
+                std::shared_ptr<Mlt::Producer> angleProducer = createMulticamProducer(multicamAngle);
+                if (angleProducer) {
+                    m_multicamProducers[angleKey] = angleProducer;
+                    m_effectStack->addService(angleProducer);
+                }
+            }
+            if (m_multicamProducers.count(angleKey) > 0) {
+                int duration = m_masterProducer->time_to_frames(m_masterProducer->get("kdenlive:duration"));
+                return std::shared_ptr<Mlt::Producer>(m_multicamProducers[angleKey]->cut(-1, duration > 0 ? duration - 1 : -1));
+            }
+            // The angle's track no longer exists in the sequence, show the full sequence
+        }
         bool byPassTrackProducer = false;
         if (trackId == -1 && (state != PlaylistState::AudioOnly || audioStream == m_masterProducer->get_int("audio_index"))) {
             byPassTrackProducer = true;
@@ -1213,6 +1254,12 @@ std::pair<std::shared_ptr<Mlt::Producer>, bool> ProjectClip::giveMasterAndGetTim
     int out = master->get_out();
     if (master->parent().is_valid()) {
         // in that case, we have a cut
+        if (m_clipType == ClipType::Timeline && state == PlaylistState::VideoOnly && master->property_exists("kdenlive:multicam_angle")) {
+            // Single angle producers are always rebuilt from the current sequence
+            std::shared_ptr<Mlt::Producer> prod(
+                getTimelineProducer(tid, clipId, state, -1, 1., secondPlaylist, {}, master->get_int("kdenlive:multicam_angle"))->cut(in, out));
+            return {prod, false};
+        }
         // check whether it's a timewarp
         double speed = 1.0;
         bool timeWarp = false;
@@ -2605,6 +2652,7 @@ void ProjectClip::reloadTimeline(std::shared_ptr<EffectStackModel> stack)
     m_videoProducers.clear();
     removeSequenceWarpResources();
     m_timewarpProducers.clear();
+    clearMulticamProducers();
     Q_EMIT refreshPropertiesPanel();
     replaceInTimeline();
     updateTimelineClips({TimelineModel::IsProxyRole});

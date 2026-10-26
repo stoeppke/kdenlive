@@ -51,6 +51,7 @@ Rectangle {
     required property int audioStream
     required property bool multiStream
     required property int aStreamIndex
+    required property string multicamAngle
     required property bool showKeyframes
     required property bool isGrabbed
     required property bool isMainItem
@@ -1426,7 +1427,8 @@ Rectangle {
                     Text {
                         // Clip name text
                         id: label
-                        property string clipNameString: (clipRoot.isAudio && clipRoot.multiStream) ? ((clipRoot.audioStream > 10000 ? 'Merged' : clipRoot.aStreamIndex) + '|' + clipRoot.clipName ) : clipRoot.clipName
+                        property string clipNameString: (clipRoot.isAudio && clipRoot.multiStream) ? ((clipRoot.audioStream > 10000 ? 'Merged' : clipRoot.aStreamIndex) + '|' + clipRoot.clipName )
+                                                                : clipRoot.multicamAngle !== '' ? (clipRoot.multicamAngle + ' | ' + clipRoot.clipName) : clipRoot.clipName
                         text: (clipRoot.speed != 1.0 ? ('[' + Math.round(clipRoot.speed*100) + '%] ') : '') + clipNameString
                         font: K.UiUtils.smallestReadableFont
                         topPadding: -2

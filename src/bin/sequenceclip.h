@@ -93,6 +93,11 @@ public:
     void markAudioDirty() override;
     /** @brief Save the audio waveform to disk for caching. */
     void saveAudioWave();
+    QStringList multicamAngles() const override;
+    std::unique_ptr<Mlt::Producer> getMulticamThumbProducer(int angle) override;
+
+protected:
+    std::shared_ptr<Mlt::Producer> createMulticamProducer(int angle) override;
 
 public Q_SLOTS:
     bool setProducer(std::shared_ptr<Mlt::Producer> producer, bool generateThumb = false, bool clearTrackProducers = true) override;
@@ -102,6 +107,8 @@ private Q_SLOTS:
     void updateAudioSync();
 
 private:
+    /** @brief Returns the index in the sequence tractor of the video track used as multicam angle, -1 if it does not exist. */
+    int multicamTrackIndex(int angle) const;
     // The sequence unique identifier
     QUuid m_sequenceUuid;
     QTemporaryFile m_sequenceThumbFile;

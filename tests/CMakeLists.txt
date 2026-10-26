@@ -26,6 +26,7 @@ set(KdenliveTest_SOURCES
     mixtest.cpp
     modeltest.cpp
     movetest.cpp
+    multicamtest.cpp
     nestingtest.cpp
     projectpathstest.cpp
     otiotest.cpp

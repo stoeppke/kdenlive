@@ -74,6 +74,11 @@ public:
     bool showKeyframes() const;
     void setShowKeyframes(bool show);
 
+    /** @brief Returns the multicam angle shown by this sequence clip (index of a sequence video track), -1 if the full sequence is shown */
+    int multicamAngle() const;
+    /** @brief Returns the display label of the active multicam angle, empty if the full sequence is shown */
+    QString multicamAngleName() const;
+
     /** @brief Returns true if the clip can be converted to a video clip */
     bool canBeVideo() const;
     /** @brief Returns true if the clip can be converted to an audio clip */
@@ -250,6 +255,11 @@ protected:
     /** @brief Returns the list of available audio stream indexes for the bin clip */
     int audioStreamIndex() const;
 
+    /** @brief Change the multicam angle with undo/redo. The caller must replug the clip in its track. */
+    bool setMulticamAngle(int angle, Fun &undo, Fun &redo);
+    /** @brief Lambda that changes the multicam angle and refreshes the producer */
+    Fun setMulticamAngle_lambda(int angle);
+
     bool audioEnabled() const;
     bool isAudioOnly() const;
     double getSpeed() const;
@@ -306,4 +316,6 @@ protected:
     int m_mixCutPos;
     /** @brief True if the clip has a timeremap effect */
     bool m_hasTimeRemap;
+    /** @brief For sequence clips, the sequence video track shown alone (multicam angle), -1 for the full sequence */
+    int m_multicamAngle{-1};
 };

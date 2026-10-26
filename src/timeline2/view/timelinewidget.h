@@ -89,6 +89,8 @@ private Q_SLOTS:
 private:
     TimelineController timelineController;
     QMenu *m_timelineClipMenu{nullptr};
+    /** @brief Lists the angles of a multicam clip, rebuilt when the clip menu opens */
+    QMenu *m_multicamMenu{nullptr};
     QMenu *m_timelineMixMenu;
     QMenu *m_timelineCompositionMenu;
     QMenu *m_timelineMenu;

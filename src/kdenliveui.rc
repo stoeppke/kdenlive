@@ -1,6 +1,6 @@
 <?xml version="1.0"?>
 <!DOCTYPE kpartgui SYSTEM "kpartgui.dtd">
-<kpartgui name="kdenlive" version="253" translationDomain="kdenlive">
+<kpartgui name="kdenlive" version="254" translationDomain="kdenlive">
   <MenuBar>
     <Menu name="file">
       <Action name="file_new"/>
@@ -144,6 +144,34 @@
       <Action name="send_library"/>
       <Action name="send_sequence"/>
       <Action name="copy_to_sequence"/>
+      <Menu name="multicam_menu" icon="view-split-left-right">
+        <text>Multicam</text>
+        <Action name="multicam_create"/>
+        <Separator/>
+        <Action name="multicam_cut_angle_1"/>
+        <Action name="multicam_cut_angle_2"/>
+        <Action name="multicam_cut_angle_3"/>
+        <Action name="multicam_cut_angle_4"/>
+        <Action name="multicam_cut_angle_5"/>
+        <Action name="multicam_cut_angle_6"/>
+        <Action name="multicam_cut_angle_7"/>
+        <Action name="multicam_cut_angle_8"/>
+        <Action name="multicam_cut_angle_9"/>
+        <Menu name="multicam_switch_menu">
+          <text>Switch Angle</text>
+          <Action name="multicam_switch_angle_1"/>
+          <Action name="multicam_switch_angle_2"/>
+          <Action name="multicam_switch_angle_3"/>
+          <Action name="multicam_switch_angle_4"/>
+          <Action name="multicam_switch_angle_5"/>
+          <Action name="multicam_switch_angle_6"/>
+          <Action name="multicam_switch_angle_7"/>
+          <Action name="multicam_switch_angle_8"/>
+          <Action name="multicam_switch_angle_9"/>
+          <Separator/>
+          <Action name="multicam_full_sequence"/>
+        </Menu>
+      </Menu>
       <Separator/>
       <Menu name="keyboard_insert">
         <text>Insertion</text>

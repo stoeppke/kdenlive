@@ -1005,6 +1005,14 @@ void MainWindow::setupActions()
         xi18nc("@info:whatsthis", "Copy the clip(s) currently selected in the timeline to a new sequence clip that can be opened in another timeline tab."));
     copyToSequence->setEnabled(false);
 
+    QAction *createMulticam =
+        addAction(QStringLiteral("multicam_create"), i18n("Create Multicam Clip from Selection"), pCore->projectManager(),
+                  SLOT(slotCreateMulticamFromSelection()), QIcon::fromTheme(QStringLiteral("view-split-left-right")), QKeySequence(), clipActionCategory);
+    createMulticam->setWhatsThis(xi18nc("@info:whatsthis",
+                                        "Moves the synchronized clips currently selected in the timeline to a new sequence, each video track becoming a camera "
+                                        "angle, and replaces them with a multicam clip showing the first angle."));
+    createMulticam->setEnabled(false);
+
     act = clipActionCategory->addAction(KStandardActions::Cut, this, &MainWindow::slotCut);
     act->setEnabled(false);
 
@@ -1224,7 +1232,16 @@ void MainWindow::setupActions()
         QAction *ac3 = new QAction(QIcon(), i18n("Select Target %1", i), this);
         ac3->setData(i - 1);
         addAction(QStringLiteral("activate_target_%1").arg(i), ac3, QKeySequence(Qt::CTRL | keysequence[i - 1]), timelineActions);
+        // Multicam angle switching, connected in TimelineTabs
+        QAction *cutAngle = new QAction(QIcon(), i18n("Cut to Angle %1", i), this);
+        cutAngle->setWhatsThis(xi18nc("@info:whatsthis", "Cuts the multicam clip at the playhead and shows angle %1 from there.", i));
+        addAction(QStringLiteral("multicam_cut_angle_%1").arg(i), cutAngle, QKeySequence(Qt::CTRL | Qt::ALT | keysequence[i - 1]), timelineActions);
+        QAction *switchAngle = new QAction(QIcon(), i18n("Switch to Angle %1", i), this);
+        switchAngle->setWhatsThis(xi18nc("@info:whatsthis", "Shows angle %1 in the selected multicam clips, without cutting.", i));
+        addAction(QStringLiteral("multicam_switch_angle_%1").arg(i), switchAngle, QKeySequence(), timelineActions);
     }
+    QAction *fullSequence = addAction(QStringLiteral("multicam_full_sequence"), i18n("Show Full Sequence"), QIcon(), QKeySequence(), timelineActions);
+    fullSequence->setWhatsThis(xi18nc("@info:whatsthis", "Shows all tracks of the sequence in the selected multicam clips instead of a single angle."));
 
     // Setup effects and transitions actions.
     KActionCategory *transitionActions = new KActionCategory(i18n("Transitions"), actionCollection());
@@ -1292,6 +1309,7 @@ void MainWindow::updateTimelineSelectionActions(const TimelineController::Select
     actionCollection()->action(QStringLiteral("ungroup_clip"))->setEnabled(state.hasGroupedItems);
     actionCollection()->action(QStringLiteral("send_sequence"))->setEnabled(itemCount > 1);
     actionCollection()->action(QStringLiteral("copy_to_sequence"))->setEnabled(itemCount > 1);
+    actionCollection()->action(QStringLiteral("multicam_create"))->setEnabled(itemCount > 1);
     actionCollection()->action(QStringLiteral("edit_cut"))->setEnabled(itemCount > 0);
     actionCollection()->action(QStringLiteral("edit_copy"))->setEnabled(itemCount > 0);
 }

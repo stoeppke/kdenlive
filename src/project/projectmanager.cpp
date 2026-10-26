@@ -2584,6 +2584,134 @@ void ProjectManager::slotCopyAndCreateSequenceFromSelection()
     pCore->pushUndo(undo, redo, i18n("Copy clips to new Sequence"));
 }
 
+void ProjectManager::slotCreateMulticamFromSelection()
+{
+    std::function<bool(void)> undo = []() { return true; };
+    std::function<bool(void)> redo = []() { return true; };
+    int aTracks = -1;
+    int vTracks = -1;
+    std::pair<int, QString> copiedData = pCore->window()->getCurrentTimeline()->controller()->getCopyItemData();
+    if (copiedData.first == -1) {
+        pCore->displayMessage(i18n("Select the synchronized clips of all cameras to create a multicam clip"), InformationMessage);
+        return;
+    }
+    // Each video track of the multicam sequence is a camera angle, so its clips must show their image
+    QDomDocument copiedXml;
+    copiedXml.setContent(copiedData.second);
+    QList<int> sourceVideoTracks;
+    QList<int> sourceAudioTracks;
+    QDomNodeList copiedClips = copiedXml.documentElement().elementsByTagName(QStringLiteral("clip"));
+    for (int i = 0; i < copiedClips.count(); i++) {
+        QDomElement clip = copiedClips.item(i).toElement();
+        int trackPosition = clip.attribute(QStringLiteral("track")).toInt();
+        if (clip.attribute(QStringLiteral("audioTrack")).toInt() == 1) {
+            if (!sourceAudioTracks.contains(trackPosition)) {
+                sourceAudioTracks << trackPosition;
+            }
+            continue;
+        }
+        if (!sourceVideoTracks.contains(trackPosition)) {
+            sourceVideoTracks << trackPosition;
+        }
+        if (clip.attribute(QStringLiteral("state")).toInt() == PlaylistState::Disabled) {
+            clip.setAttribute(QStringLiteral("state"), PlaylistState::VideoOnly);
+        }
+    }
+    copiedData.second = copiedXml.toString();
+    // The angles are named after the source tracks
+    std::sort(sourceVideoTracks.begin(), sourceVideoTracks.end());
+    std::sort(sourceAudioTracks.begin(), sourceAudioTracks.end());
+    QStringList videoTrackNames;
+    QStringList audioTrackNames;
+    for (int trackPosition : std::as_const(sourceVideoTracks)) {
+        int tid = m_activeTimelineModel->getTrackIndexFromPosition(trackPosition);
+        videoTrackNames << m_activeTimelineModel->getTrackProperty(tid, QStringLiteral("kdenlive:track_name")).toString();
+    }
+    for (int trackPosition : std::as_const(sourceAudioTracks)) {
+        int tid = m_activeTimelineModel->getTrackIndexFromPosition(trackPosition);
+        audioTrackNames << m_activeTimelineModel->getTrackProperty(tid, QStringLiteral("kdenlive:track_name")).toString();
+    }
+
+    const QUuid sourceSequence = pCore->window()->getCurrentTimeline()->getUuid();
+    std::pair<int, int> vPosition = pCore->window()->getCurrentTimeline()->controller()->selectionPosition(&aTracks, &vTracks);
+    if (!pCore->window()->getCurrentTimeline()->model()->requestItemDeletion(copiedData.first, undo, redo, true)) {
+        pCore->displayMessage(i18n("Multicam clip creation failed"), ErrorMessage);
+        return;
+    }
+    int multicamCount = 1;
+    const QStringList sequenceNames = m_project->getSequenceNames();
+    while (sequenceNames.contains(i18n("Multicam %1", multicamCount))) {
+        multicamCount++;
+    }
+    const QString newSequenceId = pCore->bin()->buildSequenceClipWithUndo(undo, redo, aTracks, vTracks, i18n("Multicam %1", multicamCount));
+    if (newSequenceId.isEmpty()) {
+        // Action canceled
+        undo();
+        return;
+    }
+    const QUuid destSequence = pCore->window()->getCurrentTimeline()->getUuid();
+    int trackId = pCore->window()->getCurrentTimeline()->controller()->activeTrack();
+    Fun local_redo1 = [destSequence]() {
+        pCore->window()->raiseTimeline(destSequence);
+        return true;
+    };
+    local_redo1();
+    bool result = TimelineFunctions::pasteClipsWithUndo(m_activeTimelineModel, copiedData.second, trackId, 0, undo, redo);
+    if (!result) {
+        pCore->window()->raiseTimeline(sourceSequence);
+        undo();
+        return;
+    }
+    PUSH_LAMBDA(local_redo1, redo);
+    // Name the multicam sequence tracks after their source tracks, in the same order
+    const auto nameTracks = [this, &redo](bool audio, const QStringList &names) {
+        QList<int> usedTracks;
+        const QList<int> trackIds = m_activeTimelineModel->getTracksIds(audio);
+        for (auto it = trackIds.crbegin(); it != trackIds.crend(); ++it) {
+            if (m_activeTimelineModel->getTrackById_const(*it)->getClipsCount() > 0) {
+                usedTracks << *it;
+            }
+        }
+        if (usedTracks.count() != names.count()) {
+            return;
+        }
+        for (int i = 0; i < names.count(); i++) {
+            if (names.at(i).isEmpty()) {
+                continue;
+            }
+            Fun rename = [model = m_activeTimelineModel, tid = usedTracks.at(i), name = names.at(i)]() {
+                model->setTrackProperty(tid, QStringLiteral("kdenlive:track_name"), name);
+                return true;
+            };
+            rename();
+            PUSH_LAMBDA(rename, redo);
+        }
+    };
+    nameTracks(false, videoTrackNames);
+    nameTracks(true, audioTrackNames);
+    Fun local_redo = [sourceSequence]() {
+        pCore->window()->raiseTimeline(sourceSequence);
+        return true;
+    };
+    local_redo();
+    PUSH_LAMBDA(local_redo, redo);
+    int newId;
+    result = m_activeTimelineModel->requestClipInsertion(newSequenceId, vPosition.second, vPosition.first, newId, false, true, false, undo, redo, {}, 1);
+    if (!result) {
+        undo();
+        pCore->displayMessage(i18n("Cannot insert sequence in current timeline"), ErrorMessage);
+        return;
+    }
+    // The multicam clip starts on the first angle, its audio part plays the sequence mix
+    if (!TimelineFunctions::setMulticamAngle(m_activeTimelineModel, newId, 0, undo, redo)) {
+        undo();
+        pCore->displayMessage(i18n("Multicam clip creation failed"), ErrorMessage);
+        return;
+    }
+    m_activeTimelineModel->updateDuration();
+    pCore->pushUndo(undo, redo, i18n("Create Multicam Clip"));
+}
+
 void ProjectManager::updateSequenceProducer(const QUuid &uuid, std::shared_ptr<Mlt::Producer> prod)
 {
     // On timeline close, update the stored sequence producer

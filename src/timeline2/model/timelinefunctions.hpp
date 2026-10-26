@@ -157,6 +157,13 @@ struct TimelineFunctions
      */
     static bool changeClipState(const std::shared_ptr<TimelineItemModel> &timeline, int clipId, PlaylistState::ClipState status, Fun &undo, Fun &redo);
 
+    /** @brief Show a single video track (multicam angle) of a sequence clip, or the full sequence with angle -1, and accumulates for undo/redo
+     */
+    static bool setMulticamAngle(const std::shared_ptr<TimelineItemModel> &timeline, int clipId, int angle, Fun &undo, Fun &redo);
+    /** @brief Cut a multicam clip and its group at position, and show angle on the part starting at position
+     */
+    static bool requestMulticamCut(const std::shared_ptr<TimelineItemModel> &timeline, int clipId, int position, int angle);
+
     static bool requestSplitAudio(const std::shared_ptr<TimelineItemModel> &timeline, int clipId, QList<int> targetTracks);
     static bool requestSplitVideo(const std::shared_ptr<TimelineItemModel> &timeline, int clipId, int videoTarget);
     static void setCompositionATrack(const std::shared_ptr<TimelineItemModel> &timeline, int cid, int aTrack);

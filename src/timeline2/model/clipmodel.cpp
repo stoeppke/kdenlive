@@ -17,10 +17,11 @@
 #include "macros.hpp"
 #include "timelinemodel.hpp"
 #include "trackmodel.hpp"
+#include <KLocalizedString>
 #include <QDebug>
 #include <effects/effectsrepository.hpp>
-#include <mlt++/MltProducer.h>
 #include <limits>
+#include <mlt++/MltProducer.h>
 #include <utility>
 
 ClipModel::ClipModel(const std::shared_ptr<TimelineModel> &parent, std::shared_ptr<Mlt::Producer> prod, const QString &binClipId, int id,
@@ -125,6 +126,10 @@ int ClipModel::construct(const std::shared_ptr<TimelineModel> &parent, const QSt
     std::shared_ptr<ClipModel> clip(new ClipModel(parent, result.first, binClipId, id, state, speed));
     if (warp_pitch) {
         result.first->parent().set("warp_pitch", 1);
+    }
+    if (producer->property_exists("kdenlive:multicam_angle")) {
+        clip->m_multicamAngle = producer->get_int("kdenlive:multicam_angle");
+        result.first->set("kdenlive:multicam_angle", clip->m_multicamAngle);
     }
     clip->setClipState_lambda(state)();
     clip->setSubPlaylistIndex(playlist, -1);
@@ -925,9 +930,13 @@ void ClipModel::refreshProducerFromBin(int trackId, PlaylistState::ClipState sta
 
     std::shared_ptr<ProjectClip> binClip = pCore->projectItemModel()->getClipByBinID(m_binClipId);
     // Q_ASSERT(binClip->statusReady());
-    std::shared_ptr<Mlt::Producer> binProducer = binClip->getTimelineProducer(trackId, m_id, state, stream, m_speed, secondPlaylist, remapInfo);
+    std::shared_ptr<Mlt::Producer> binProducer =
+        binClip->getTimelineProducer(trackId, m_id, state, stream, m_speed, secondPlaylist, remapInfo, m_multicamAngle);
     int length = m_producer->get_int("length");
     m_producer = std::move(binProducer);
+    if (m_multicamAngle > -1) {
+        m_producer->set("kdenlive:multicam_angle", m_multicamAngle);
+    }
     if (m_endlessResize && m_producer->parent().get_length() < length) {
         // if endless resize is enabled, we have to carry the length over from
         // the other instance, as we might have extended it in a previous
@@ -998,6 +1007,10 @@ void ClipModel::refreshProducerFromBin(int trackId)
 
 bool ClipModel::useTimeRemapProducer(bool enable, Fun &undo, Fun &redo)
 {
+    if (enable && m_multicamAngle > -1) {
+        pCore->displayMessage(i18n("Time remapping is not supported on a multicam angle"), ErrorMessage);
+        return false;
+    }
     std::function<bool(void)> local_undo = []() { return true; };
     std::function<bool(void)> local_redo = []() { return true; };
     int audioStream = getIntProperty(QStringLiteral("audio_index"));
@@ -1066,6 +1079,10 @@ bool ClipModel::useTimewarpProducer(double speed, bool pitchCompensate, bool cha
 {
     if (m_endlessResize) {
         // no timewarp for endless producers
+        return false;
+    }
+    if (m_multicamAngle > -1 && !qFuzzyCompare(speed, 1.)) {
+        pCore->displayMessage(i18n("Speed change is not supported on a multicam angle"), ErrorMessage);
         return false;
     }
     std::function<bool(void)> local_undo = []() { return true; };
@@ -1177,6 +1194,64 @@ int ClipModel::audioStreamIndex() const
 {
     READ_LOCK();
     return pCore->projectItemModel()->getClipByBinID(m_binClipId)->audioStreamIndex(audioStream()) + 1;
+}
+
+int ClipModel::multicamAngle() const
+{
+    READ_LOCK();
+    return m_multicamAngle;
+}
+
+QString ClipModel::multicamAngleName() const
+{
+    READ_LOCK();
+    std::shared_ptr<ProjectClip> binClip = pCore->projectItemModel()->getClipByBinID(m_binClipId);
+    if (m_multicamAngle < 0 || !binClip || binClip->clipType() != ClipType::Timeline) {
+        return QString();
+    }
+    const QStringList angles = binClip->multicamAngles();
+    if (m_multicamAngle < angles.count()) {
+        return QStringLiteral("%1: %2").arg(m_multicamAngle + 1).arg(angles.at(m_multicamAngle));
+    }
+    return i18n("Angle %1", m_multicamAngle + 1);
+}
+
+Fun ClipModel::setMulticamAngle_lambda(int angle)
+{
+    return [this, angle]() {
+        if (angle == m_multicamAngle) {
+            return true;
+        }
+        m_multicamAngle = angle;
+        // Enforce producer reload
+        m_lastTrackId = -1;
+        refreshProducerFromBin(m_currentTrackId);
+        if (auto ptr = m_parent.lock()) {
+            if (m_currentTrackId != -1 && ptr->isClip(m_id)) {
+                QModelIndex ix = ptr->makeClipIndexFromID(m_id);
+                Q_EMIT ptr->dataChanged(ix, ix, {TimelineModel::MulticamAngleRole, TimelineModel::ClipThumbRole});
+            }
+        }
+        return true;
+    };
+}
+
+bool ClipModel::setMulticamAngle(int angle, Fun &undo, Fun &redo)
+{
+    if (angle == m_multicamAngle) {
+        return true;
+    }
+    if (m_clipType != ClipType::Timeline || isAudioOnly()) {
+        return false;
+    }
+    int previousAngle = m_multicamAngle;
+    auto operation = setMulticamAngle_lambda(angle);
+    if (operation()) {
+        auto reverse = setMulticamAngle_lambda(previousAngle);
+        UPDATE_UNDO_REDO(operation, reverse, undo, redo);
+        return true;
+    }
+    return false;
 }
 
 int ClipModel::fadeIn() const
@@ -1411,6 +1486,9 @@ QDomElement ClipModel::toXml(QDomDocument &document)
     }
     container.setAttribute(QStringLiteral("speed"), QString::number(m_speed, 'f'));
     container.setAttribute(QStringLiteral("audioStream"), getIntProperty(QStringLiteral("audio_index")));
+    if (m_multicamAngle > -1) {
+        container.setAttribute(QStringLiteral("multicamAngle"), m_multicamAngle);
+    }
     if (!qFuzzyCompare(m_speed, 1.)) {
         container.setAttribute(QStringLiteral("warp_pitch"), getIntProperty(QStringLiteral("warp_pitch")));
     }
@@ -1611,7 +1689,12 @@ const QString ClipModel::clipThumbPath()
 {
     std::shared_ptr<ProjectClip> binClip = pCore->projectItemModel()->getClipByBinID(m_binClipId);
     if (binClip) {
-        return binClip->baseThumbPath();
+        QString path = binClip->baseThumbPath();
+        if (m_multicamAngle > -1 && binClip->clipType() == ClipType::Timeline) {
+            // Single angle thumbnails use binId/uuid/mc<angle>/#frame
+            path.insert(path.length() - 1, QStringLiteral("mc%1/").arg(m_multicamAngle));
+        }
+        return path;
     }
     return QString();
 }

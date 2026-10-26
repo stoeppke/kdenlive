@@ -231,9 +231,14 @@ public:
     QMap<QUuid, QList<int>> getAllTimelineInstances() const;
     /** @brief This function returns a cut to the master producer associated to the timeline clip with given ID.
         Each clip must have a different master producer (see comment of the class)
+        @param multicamAngle for a sequence clip in video state, the index of the sequence video track to show alone, -1 for the full sequence
     */
     std::shared_ptr<Mlt::Producer> getTimelineProducer(int trackId, int clipId, PlaylistState::ClipState st, int audioStream = -1, double speed = 1.0,
-                                                       bool secondPlaylist = false, const TimeWarpInfo timeremapInfo = {});
+                                                       bool secondPlaylist = false, const TimeWarpInfo timeremapInfo = {}, int multicamAngle = -1);
+    /** @brief Returns the display names of the multicam angles (the video tracks of a sequence clip, bottom first), empty for other clips. */
+    virtual QStringList multicamAngles() const;
+    /** @brief Returns a producer showing a single multicam angle, used for timeline thumbnails. */
+    virtual std::unique_ptr<Mlt::Producer> getMulticamThumbProducer(int angle);
 
     /** @brief This function should only be used at loading. It takes a producer that was read from mlt, and checks whether the master producer is already in
         use. If yes, then we must create a new one, because of the mixing bug. In any case, we return a cut of the master that can be used in the timeline.
@@ -338,11 +343,17 @@ protected:
     std::unordered_map<QString, std::shared_ptr<Mlt::Producer>> m_audioProducers;
     std::unordered_map<int, std::shared_ptr<Mlt::Producer>> m_videoProducers;
     std::unordered_map<int, std::shared_ptr<Mlt::Producer>> m_timewarpProducers;
+    /** @brief Single angle producers of a sequence clip, keys are "trackId#angle" */
+    std::unordered_map<QString, std::shared_ptr<Mlt::Producer>> m_multicamProducers;
     std::shared_ptr<Mlt::Producer> m_disabledProducer;
     QMap<QUuid, QList<int>> m_registeredClipsByUuid;
 
     /** @brief This is a helper function that creates the disabled producer. This is a clone of the original one, with audio and video disabled */
     virtual void createDisabledMasterProducer();
+    /** @brief Creates a producer showing only one video track (multicam angle) of a sequence clip, nullptr if the angle does not exist. */
+    virtual std::shared_ptr<Mlt::Producer> createMulticamProducer(int angle);
+    /** @brief Release the single angle producers, they are rebuilt from the current master producer on next request. */
+    void clearMulticamProducers();
     virtual const QString getSequenceResource();
     virtual QTemporaryFile *getSequenceTmpResource();
     virtual void removeSequenceWarpResources();
