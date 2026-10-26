@@ -1,5 +1,31 @@
 ![](data/pics/kdenlive-logo.png)
 
+> [!NOTE]
+> **This is an experimental fork of Kdenlive that adds multicam clips.** The feature lives on the `multicam-clips` branch. It is not part of Kdenlive and has not been submitted to KDE. It was developed with the help of an AI coding assistant and has been tested on macOS only. Bug reports are welcome as [issues](https://github.com/stoeppke/kdenlive/issues).
+
+## Multicam clips
+
+![Multicam clips in Kdenlive](.github/multicam-demo.gif)
+
+[Watch the demo as video with sound (58 s)](.github/multicam-demo.mp4)
+
+Multicam clips work like in Final Cut Pro: several synchronized cameras become one clip in the timeline, and you cut between camera angles inside that clip. Every piece is a cut of the same sequence, so the cameras cannot drift apart.
+
+- **Create:** put the synchronized camera clips on separate video tracks, select them with their audio and choose *Sequence › Multicam › Create Multicam Clip from Selection*. The clips move into a new sequence with one angle per video track, named after the tracks, and a single multicam clip replaces them, showing angle 1.
+- **Cut to an angle:** *Cut to Angle 1…9* (<kbd>Cmd</kbd>+<kbd>Option</kbd>+<kbd>1…9</kbd> on macOS, <kbd>Ctrl</kbd>+<kbd>Alt</kbd>+<kbd>1…9</kbd> on Linux and Windows) cuts the multicam clip at the playhead and shows that angle from there on. It works during playback too.
+- **Switch without cutting:** *Sequence › Multicam › Switch Angle* or the clip's context menu *Multicam Angle* changes the angle of the selected pieces. *Full Sequence* shows the sequence as usual.
+- **Any sequence works:** each video track of a sequence is an angle, counted from the bottom. The audio of a multicam clip is the sequence's mix.
+
+Known limitations:
+
+- Switching angles during playback pauses the picture for about a second, while Kdenlive seeks in the other camera's file. Proxy clips make this shorter.
+- There is no angle viewer showing all cameras side by side yet, and Kdenlive has no roll edit to move a switch point.
+- Speed changes and time remapping are not available on multicam clips.
+
+To try it, build the `multicam-clips` branch as described in [dev-docs/build.md](dev-docs/build.md).
+
+---
+
 # Kdenlive
 
 Kdenlive is a powerful, free and open-source video editor that brings professional-grade video editing capabilities to everyone. Whether you're creating a simple family video or working on a complex project, Kdenlive provides the tools you need to bring your vision to life.
